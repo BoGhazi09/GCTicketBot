@@ -9,10 +9,7 @@ const {
   EmbedBuilder,
   REST,
   Routes,
-  SlashCommandBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle
+  SlashCommandBuilder
 } = require("discord.js");
 
 const express = require("express");
@@ -46,16 +43,16 @@ const channelMap = {
   "1479968874370961450": { prefix: "showcase" }
 };
 
-// ===== MEMORY (FIXED) =====
-const claimed = new Map();        // channelId -> userId OR null
-const originalName = new Map();   // channelId -> string
+// ===== MEMORY =====
+const baseName = new Map();     // channelId -> base name
+const renameCount = new Map();  // channelId -> number
 
 // ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== REGISTER =====
+// ===== SLASH =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -65,10 +62,15 @@ const commands = [
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log("Slash registered");
+  } catch (e) {
+    console.log(e);
+  }
 })();
 
 client.once("ready", () => {
@@ -81,26 +83,32 @@ client.on("interactionCreate", async (interaction) => {
   // ===== PANEL =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
-    const modal = new ModalBuilder()
-      .setCustomId("panel_modal")
-      .setTitle("Create Panel");
-
-    const title = new TextInputBuilder()
-      .setCustomId("title")
-      .setLabel("Title")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    const desc = new TextInputBuilder()
-      .setCustomId("desc")
-      .setLabel("Description")
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(title),
-      new ActionRowBuilder().addComponents(desc)
-    );
+    const modal = {
+      customId: "panel_modal",
+      title: "Create Panel",
+      components: [
+        {
+          type: 1,
+          components: [{
+            type: 4,
+            custom_id: "title",
+            label: "Title",
+            style: 1,
+            required: true
+          }]
+        },
+        {
+          type: 1,
+          components: [{
+            type: 4,
+            custom_id: "desc",
+            label: "Description",
+            style: 2,
+            required: true
+          }]
+        }
+      ]
+    };
 
     return interaction.showModal(modal);
   }
@@ -108,10 +116,13 @@ client.on("interactionCreate", async (interaction) => {
   // ===== PANEL SUBMIT =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
+    const title = interaction.fields.getTextInputValue("title");
+    const desc = interaction.fields.getTextInputValue("desc");
+
     const embed = new EmbedBuilder()
       .setColor(0x2b2d31)
-      .setTitle(interaction.fields.getTextInputValue("title"))
-      .setDescription(interaction.fields.getTextInputValue("desc"));
+      .setTitle(title)
+      .setDescription(desc);
 
     const btn = new ButtonBuilder()
       .setCustomId("create_ticket")
@@ -124,12 +135,12 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== CREATE =====
+  // ===== CREATE TICKET =====
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     const data = channelMap[interaction.channel.id];
     if (!data) {
-      return interaction.reply({ content: "Not panel channel", ephemeral: true });
+      return interaction.reply({ content: "Not a panel channel", ephemeral: true });
     }
 
     const base = `${data.prefix}-${interaction.user.username}`;
@@ -139,78 +150,76 @@ client.on("interactionCreate", async (interaction) => {
       type: ChannelType.GuildText,
       parent: CATEGORY_ID,
       permissionOverwrites: [
-        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] }
+        {
+          id: interaction.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: interaction.user.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages
+          ]
+        }
       ]
     });
 
-    originalName.set(channel.id, base);
-    claimed.set(channel.id, null);
+    baseName.set(channel.id, base);
+    renameCount.set(channel.id, 0);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder()
+        .setCustomId("rename")
+        .setLabel("Rename")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("close")
+        .setLabel("Close")
+        .setStyle(ButtonStyle.Danger)
     );
 
-    await channel.send({
+    const msg = await channel.send({
       content: `<@${interaction.user.id}>`,
-      embeds: [new EmbedBuilder().setTitle("Ticket Opened").setColor(0x2b2d31)],
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Ticket Opened")
+          .setColor(0x2b2d31)
+      ],
       components: [row]
     });
 
-    return interaction.reply({ content: `Created ${channel}`, ephemeral: true });
+    // ===== PIN FIRST MESSAGE =====
+    await msg.pin().catch(() => {});
+
+    return interaction.reply({
+      content: `Created ${channel}`,
+      ephemeral: true
+    });
   }
 
-  // ===== CLAIM (FIXED RESET BUG) =====
-  if (interaction.isButton() && interaction.customId === "claim") {
+  // ===== RENAME (NO POPUP, AUTO INCREMENT) =====
+  if (interaction.isButton() && interaction.customId === "rename") {
 
-    const current = claimed.get(interaction.channel.id);
-
-    if (current !== null && current !== undefined) {
-      return interaction.reply({
-        content: `Already claimed by <@${current}>`,
-        ephemeral: true
-      });
+    const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
+    if (!isStaff) {
+      return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
-    claimed.set(interaction.channel.id, interaction.user.id);
+    const base = baseName.get(interaction.channel.id) || interaction.channel.name;
 
-    const base = originalName.get(interaction.channel.id) || interaction.channel.name;
-    const newName = `${base}-${interaction.user.username}`;
+    let count = renameCount.get(interaction.channel.id) || 0;
+    count++;
+
+    renameCount.set(interaction.channel.id, count);
+
+    const newName = `${base}-pilot${count}`;
 
     try {
       await interaction.channel.setName(newName);
     } catch {}
 
     return interaction.reply({
-      content: `Claimed by ${interaction.user}`,
-      ephemeral: false
-    });
-  }
-
-  // ===== UNCLAIM (FULL RESET FIX) =====
-  if (interaction.isButton() && interaction.customId === "unclaim") {
-
-    const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const claimer = claimed.get(interaction.channel.id);
-
-    if (!owner && claimer !== interaction.user.id) {
-      return interaction.reply({ content: "No permission", ephemeral: true });
-    }
-
-    const base = originalName.get(interaction.channel.id) || interaction.channel.name;
-
-    // 🔥 IMPORTANT: HARD RESET
-    claimed.delete(interaction.channel.id);
-    claimed.set(interaction.channel.id, null);
-
-    try {
-      await interaction.channel.setName(base);
-    } catch {}
-
-    return interaction.reply({
-      content: "Unclaimed",
+      content: `Renamed to ${newName}`,
       ephemeral: false
     });
   }
@@ -218,10 +227,8 @@ client.on("interactionCreate", async (interaction) => {
   // ===== CLOSE =====
   if (interaction.isButton() && interaction.customId === "close") {
 
-    const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const claimer = claimed.get(interaction.channel.id);
-
-    if (!owner && claimer !== interaction.user.id) {
+    const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
+    if (!isStaff) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
