@@ -9,7 +9,10 @@ const {
   EmbedBuilder,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 const express = require("express");
@@ -52,7 +55,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== SLASH =====
+// ===== REGISTER COMMAND =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -80,7 +83,7 @@ client.once("ready", () => {
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL =====
+  // ===== PANEL COMMAND =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
@@ -134,7 +137,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const data = channelMap[interaction.channel.id];
     if (!data) {
-      return interaction.reply({ content: "Not a panel channel", ephemeral: true });
+      return interaction.reply({ content: "Not panel channel", ephemeral: true });
     }
 
     const base = `${data.prefix}-${interaction.user.username}`;
@@ -182,7 +185,6 @@ client.on("interactionCreate", async (interaction) => {
       components: [row]
     });
 
-    // ===== AUTO PIN BOT MESSAGE =====
     await msg.pin().catch(() => {});
 
     return interaction.reply({
@@ -208,12 +210,10 @@ client.on("interactionCreate", async (interaction) => {
 
     const newName = `${base}-pilot${count}`;
 
-    try {
-      await interaction.channel.setName(newName);
-    } catch {}
+    await interaction.channel.setName(newName).catch(() => {});
 
     return interaction.reply({
-      content: `Renamed to ${newName}`,
+      content: `Renamed → ${newName}`,
       ephemeral: false
     });
   }
