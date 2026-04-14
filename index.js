@@ -28,9 +28,9 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-const STAFF_ROLE_ID = "PUT_STAFF_ROLE_ID";
-const CATEGORY_ID = "PUT_CATEGORY_ID";
-const LOG_CHANNEL_ID = "PUT_LOG_CHANNEL_ID";
+const STAFF_ROLE_ID = "1478564123259310090";
+const CATEGORY_ID = "1488457065377824900";
+const LOG_CHANNEL_ID = "1488466548828930118";
 
 const cooldown = new Set();
 
