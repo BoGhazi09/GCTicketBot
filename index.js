@@ -28,9 +28,9 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-const STAFF_ROLE_ID = "1478564123259310090";
-const CATEGORY_ID = "1488457065377824900";
-const LOG_CHANNEL_ID = "1488466548828930118";
+const STAFF_ROLE_ID = "PUT_STAFF_ROLE_ID";
+const CATEGORY_ID = "PUT_CATEGORY_ID";
+const LOG_CHANNEL_ID = "PUT_LOG_CHANNEL_ID";
 
 const cooldown = new Set();
 
@@ -38,7 +38,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// register command
+// command
 const commands = [
   new SlashCommandBuilder().setName("panel").setDescription("Create ticket panel")
 ].map(c => c.toJSON());
@@ -112,27 +112,26 @@ client.on("interactionCreate", async (interaction) => {
     const channelId = interaction.customId.split("_")[1];
     const channel = await client.channels.fetch(channelId);
 
-    const title = interaction.fields.getTextInputValue("title");
-    const desc = interaction.fields.getTextInputValue("desc");
-
     const embed = new EmbedBuilder()
       .setColor(0x2b2d31)
-      .setTitle(title)
-      .setDescription(desc);
+      .setTitle(interaction.fields.getTextInputValue("title"))
+      .setDescription(interaction.fields.getTextInputValue("desc"));
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("ticket_support").setLabel("Support").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("ticket_buy").setLabel("Buy").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("ticket_other").setLabel("Other").setStyle(ButtonStyle.Secondary)
-    );
+    const button = new ButtonBuilder()
+      .setCustomId("create_ticket")
+      .setLabel("Create a Ticket!")
+      .setStyle(ButtonStyle.Primary);
 
-    await channel.send({ embeds: [embed], components: [row] });
+    await channel.send({
+      embeds: [embed],
+      components: [new ActionRowBuilder().addComponents(button)]
+    });
 
     return interaction.reply({ content: "Panel created!", ephemeral: true });
   }
 
   // ===== CREATE TICKET =====
-  if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
+  if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     if (cooldown.has(interaction.user.id)) {
       return interaction.reply({ content: "Wait a few seconds.", ephemeral: true });
@@ -141,10 +140,8 @@ client.on("interactionCreate", async (interaction) => {
     cooldown.add(interaction.user.id);
     setTimeout(() => cooldown.delete(interaction.user.id), 5000);
 
-    const type = interaction.customId.split("_")[1];
-
     const ticketChannel = await interaction.guild.channels.create({
-      name: `${type}-${interaction.user.username}`,
+      name: `ticket-${interaction.user.username}`,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID,
       permissionOverwrites: [
@@ -159,7 +156,7 @@ client.on("interactionCreate", async (interaction) => {
     const embed = new EmbedBuilder()
       .setColor(0x2b2d31)
       .setTitle("Ticket Created")
-      .setDescription(`Type: **${type}**\nUser: <@${interaction.user.id}>`);
+      .setDescription(`User: <@${interaction.user.id}>`);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
@@ -173,7 +170,10 @@ client.on("interactionCreate", async (interaction) => {
       components: [row]
     });
 
-    return interaction.reply({ content: `Ticket created: ${ticketChannel}`, ephemeral: true });
+    return interaction.reply({
+      content: `Ticket created: ${ticketChannel}`,
+      ephemeral: true
+    });
   }
 
   // ===== CLAIM =====
@@ -182,7 +182,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "Staff only.", ephemeral: true });
     }
 
-    await interaction.reply({ content: `Claimed by ${interaction.user}` });
+    return interaction.reply({ content: `Claimed by ${interaction.user}` });
   }
 
   // ===== RENAME =====
@@ -194,7 +194,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const input = new TextInputBuilder()
       .setCustomId("name")
-      .setLabel("New channel name")
+      .setLabel("New name")
       .setStyle(TextInputStyle.Short);
 
     modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -217,7 +217,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const messages = await interaction.channel.messages.fetch({ limit: 100 });
 
-    let transcript = messages
+    const transcript = messages
       .map(m => `${m.author.tag}: ${m.content}`)
       .reverse()
       .join("\n");
@@ -226,7 +226,7 @@ client.on("interactionCreate", async (interaction) => {
       content: `Transcript for ${interaction.channel.name}\n\n${transcript}`
     });
 
-    await interaction.reply({ content: "Closing ticket...", ephemeral: true });
+    await interaction.reply({ content: "Closing...", ephemeral: true });
 
     setTimeout(() => interaction.channel.delete(), 3000);
   }
