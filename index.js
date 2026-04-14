@@ -17,7 +17,7 @@ const {
 
 const express = require("express");
 
-// keep alive
+// ===== KEEP ALIVE =====
 const app = express();
 app.get("/", (req, res) => res.send("Bot running"));
 app.listen(process.env.PORT || 3000);
@@ -28,10 +28,9 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const OWNER_ROLE = "1478554422303916185";
-
 const CATEGORY_ID = "1488457065377824900";
 
-// roles per service
+// channel map
 const channelMap = {
   "1478552685706875160": { prefix: "war", role: "1478560237794623583" },
   "1478556731306152098": { prefix: "war", role: "1478560237794623583" },
@@ -46,15 +45,16 @@ const channelMap = {
   "1491752594157080647": { prefix: "filler", role: "1491752366016561172" }
 };
 
+// memory
+const claimed = new Map();
+const baseName = new Map();
+
+// ===== BOT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// store claims + base names
-const claimed = new Map();
-const baseName = new Map();
-
-// ===== SLASH =====
+// ===== COMMAND =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -71,13 +71,13 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 })();
 
 client.once("ready", () => {
-  console.log("Ready " + client.user.tag);
+  console.log("Ready: " + client.user.tag);
 });
 
-// ===== INTERACTIONS =====
+// ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL COMMAND =====
+  // ===== PANEL =====
   if (interaction.isChatInputCommand()) {
 
     const modal = new ModalBuilder()
@@ -86,12 +86,12 @@ client.on("interactionCreate", async (interaction) => {
 
     const title = new TextInputBuilder()
       .setCustomId("title")
-      .setLabel("Panel Title")
+      .setLabel("Title")
       .setStyle(TextInputStyle.Short);
 
     const desc = new TextInputBuilder()
       .setCustomId("desc")
-      .setLabel("Panel Description")
+      .setLabel("Description")
       .setStyle(TextInputStyle.Paragraph);
 
     modal.addComponents(
@@ -102,7 +102,6 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.showModal(modal);
   }
 
-  // ===== PANEL CREATE =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
     const embed = new EmbedBuilder()
@@ -127,10 +126,10 @@ client.on("interactionCreate", async (interaction) => {
     const data = channelMap[interaction.channel.id];
     if (!data) return interaction.reply({ content: "Wrong channel", ephemeral: true });
 
-    const name = `${data.prefix}-${interaction.user.username}`;
+    const base = `${data.prefix}-${interaction.user.username}`;
 
     const channel = await interaction.guild.channels.create({
-      name,
+      name: base,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID,
       permissionOverwrites: [
@@ -140,7 +139,8 @@ client.on("interactionCreate", async (interaction) => {
       ]
     });
 
-    baseName.set(channel.id, name);
+    baseName.set(channel.id, base);
+    claimed.set(channel.id, null);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
@@ -168,11 +168,11 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: `Claimed by ${interaction.user}` });
   }
 
-  // ===== CHECK OWNER =====
+  // ===== CHECK PERMS =====
   const isOwner = interaction.member.roles.cache.has(OWNER_ROLE);
   const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
 
-  // ===== RENAME =====
+  // ===== RENAME BUTTON =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
     if (!isOwner && !isClaimer) {
@@ -180,12 +180,12 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const modal = new ModalBuilder()
-      .setCustomId("rename_modal")
+      .setCustomId(`rename_modal_${interaction.channel.id}`)
       .setTitle("Rename Ticket");
 
     const input = new TextInputBuilder()
-      .setCustomId("name")
-      .setLabel("Your name tag")
+      .setCustomId("tag")
+      .setLabel("Name tag")
       .setStyle(TextInputStyle.Short);
 
     modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -193,18 +193,22 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.showModal(modal);
   }
 
-  // ===== APPLY RENAME FORMAT =====
-  if (interaction.isModalSubmit() && interaction.customId === "rename_modal") {
+  // ===== RENAME FIXED =====
+  if (interaction.isModalSubmit() && interaction.customId.startsWith("rename_modal_")) {
 
-    const tag = interaction.fields.getTextInputValue("name");
+    const channelId = interaction.customId.split("_")[2];
+    const tag = interaction.fields.getTextInputValue("tag");
 
-    const base = baseName.get(interaction.channel.id) || interaction.channel.name;
+    const base = baseName.get(channelId) || interaction.channel.name;
 
     const newName = `${base}-${tag}`;
 
     await interaction.channel.setName(newName);
 
-    return interaction.reply({ content: `Renamed to ${newName}`, ephemeral: true });
+    return interaction.reply({
+      content: `Renamed to ${newName}`,
+      ephemeral: true
+    });
   }
 
   // ===== CLOSE =====
