@@ -17,7 +17,7 @@ const {
 
 const express = require("express");
 
-// keep alive
+// ===== KEEP ALIVE =====
 const app = express();
 app.get("/", (req, res) => res.send("Bot running"));
 app.listen(process.env.PORT || 3000);
@@ -33,7 +33,7 @@ const CATEGORY_ID = "1488457065377824900";
 // ===== SERVICE MAP =====
 const channelMap = {
   "1478552685706875160": { prefix: "war" },
-  "147855673209981051": { prefix: "aoo" },
+  "1478556731306152098": { prefix: "aoo" },
   "1478556849124147381": { prefix: "strife" },
 
   "1478556676259971142": { prefix: "honor" },
@@ -42,19 +42,20 @@ const channelMap = {
   "1478556700934930512": { prefix: "marauders" },
 
   "1491752594157080647": { prefix: "filler" },
+
   "1479968874370961450": { prefix: "showcase" }
 };
 
 // ===== MEMORY =====
-const claimed = new Map();        // channelId -> userId
-const originalName = new Map();   // channelId -> string
+const claimed = new Map();
+const originalName = new Map();
 
-// ===== BOT =====
+// ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== SLASH =====
+// ===== SLASH COMMAND =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -64,12 +65,18 @@ const commands = [
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log("Slash command registered");
+  } catch (e) {
+    console.log("Command register error", e);
+  }
 })();
 
+// ===== READY =====
 client.once("ready", () => {
   console.log("Ready " + client.user.tag);
 });
@@ -77,7 +84,7 @@ client.once("ready", () => {
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL =====
+  // ===== PANEL (FIXED 40060 SAFE) =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
@@ -87,22 +94,24 @@ client.on("interactionCreate", async (interaction) => {
     const title = new TextInputBuilder()
       .setCustomId("title")
       .setLabel("Title")
-      .setStyle(TextInputStyle.Short);
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
     const desc = new TextInputBuilder()
       .setCustomId("desc")
       .setLabel("Description")
-      .setStyle(TextInputStyle.Paragraph);
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(title),
       new ActionRowBuilder().addComponents(desc)
     );
 
-    return interaction.showModal(modal);
+    return interaction.showModal(modal); // IMPORTANT: STOP HERE
   }
 
-  // ===== PANEL CREATE =====
+  // ===== PANEL SUBMIT =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
     const embed = new EmbedBuilder()
@@ -117,7 +126,8 @@ client.on("interactionCreate", async (interaction) => {
 
     return interaction.reply({
       embeds: [embed],
-      components: [new ActionRowBuilder().addComponents(btn)]
+      components: [new ActionRowBuilder().addComponents(btn)],
+      ephemeral: false
     });
   }
 
@@ -125,8 +135,12 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     const data = channelMap[interaction.channel.id];
+
     if (!data) {
-      return interaction.reply({ content: "Not a panel channel", ephemeral: true });
+      return interaction.reply({
+        content: "This is not a valid panel channel.",
+        ephemeral: true
+      });
     }
 
     const base = `${data.prefix}-${interaction.user.username}`;
@@ -147,6 +161,7 @@ client.on("interactionCreate", async (interaction) => {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("rename").setLabel("Rename").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
@@ -156,37 +171,40 @@ client.on("interactionCreate", async (interaction) => {
       components: [row]
     });
 
-    return interaction.reply({ content: `Created ${channel}`, ephemeral: true });
+    return interaction.reply({
+      content: `Created ${channel}`,
+      ephemeral: true
+    });
   }
 
-  // ===== CLAIM (AUTO RENAME + LOCK) =====
+  // ===== CLAIM =====
   if (interaction.isButton() && interaction.customId === "claim") {
 
     if (claimed.get(interaction.channel.id)) {
       return interaction.reply({ content: "Already claimed", ephemeral: true });
     }
 
+    claimed.set(interaction.channel.id, interaction.user.id);
+
     const base = originalName.get(interaction.channel.id);
     const newName = `${base}-${interaction.user.username}`;
-
-    claimed.set(interaction.channel.id, interaction.user.id);
 
     await interaction.channel.setName(newName);
 
     return interaction.reply({
-      content: `Claimed & renamed to ${newName}`,
+      content: `Claimed & renamed`,
       ephemeral: false
     });
   }
 
-  // ===== UNCLAIM (RESET NAME) =====
+  // ===== UNCLAIM =====
   if (interaction.isButton() && interaction.customId === "unclaim") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const claimer = claimed.get(interaction.channel.id) === interaction.user.id;
+    const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
 
-    if (!owner && !claimer) {
-      return interaction.reply({ content: "Not allowed", ephemeral: true });
+    if (!owner && !isClaimer) {
+      return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
     const base = originalName.get(interaction.channel.id);
@@ -196,7 +214,28 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.channel.setName(base);
 
     return interaction.reply({
-      content: "Unclaimed & reset name",
+      content: "Unclaimed & reset",
+      ephemeral: false
+    });
+  }
+
+  // ===== RENAME =====
+  if (interaction.isButton() && interaction.customId === "rename") {
+
+    const owner = interaction.member.roles.cache.has(OWNER_ROLE);
+    const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
+
+    if (!owner && !isClaimer) {
+      return interaction.reply({ content: "No permission", ephemeral: true });
+    }
+
+    const base = originalName.get(interaction.channel.id);
+    const newName = `${base}-${interaction.user.username}`;
+
+    await interaction.channel.setName(newName);
+
+    return interaction.reply({
+      content: "Renamed",
       ephemeral: false
     });
   }
@@ -205,13 +244,14 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton() && interaction.customId === "close") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const claimer = claimed.get(interaction.channel.id) === interaction.user.id;
+    const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
 
-    if (!owner && !claimer) {
-      return interaction.reply({ content: "Not allowed", ephemeral: true });
+    if (!owner && !isClaimer) {
+      return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
     await interaction.reply({ content: "Closing..." });
+
     setTimeout(() => interaction.channel.delete(), 2000);
   }
 
