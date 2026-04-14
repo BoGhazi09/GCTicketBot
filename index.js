@@ -30,20 +30,14 @@ const GUILD_ID = process.env.GUILD_ID;
 const OWNER_ROLE = "1478554422303916185";
 const CATEGORY_ID = "1488457065377824900";
 
-// ===== SERVICE MAP (FIXED NAMES) =====
+// service map
 const channelMap = {
   "1478552685706875160": { prefix: "war" },
-
-  "1478556731306152098": { prefix: "aoo" },        // ark of osiris
-  "1478556849124147381": { prefix: "strife" },     // supreme strife
-
-  "1478556676259971142": { prefix: "honor" },      // chaining
-  "1478553096048345272": { prefix: "forts" },      // forts
-
-  "1478556700934930512": { prefix: "marauders" },  // marauders
-
-  "1479968874370961450": { prefix: "showcase" },
-  "1491752594157080647": { prefix: "filler" }
+  "1478556731306152098": { prefix: "aoo" },
+  "1478556849124147381": { prefix: "strife" },
+  "1478556676259971142": { prefix: "honor" },
+  "1478553096048345272": { prefix: "forts" },
+  "1478556700934930512": { prefix: "marauders" }
 };
 
 // memory
@@ -55,7 +49,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== REGISTER COMMAND =====
+// ===== SLASH COMMAND =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -72,18 +66,18 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 })();
 
 client.once("ready", () => {
-  console.log("Ready: " + client.user.tag);
+  console.log("Ready " + client.user.tag);
 });
 
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL COMMAND =====
-  if (interaction.isChatInputCommand()) {
+  // ===== PANEL (FIXED) =====
+  if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
       .setCustomId("panel_modal")
-      .setTitle("Create Ticket Panel");
+      .setTitle("Create Panel");
 
     const title = new TextInputBuilder()
       .setCustomId("title")
@@ -105,7 +99,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.showModal(modal);
   }
 
-  // ===== PANEL CREATE =====
+  // ===== PANEL SUBMIT =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
     const embed = new EmbedBuilder()
@@ -154,11 +148,7 @@ client.on("interactionCreate", async (interaction) => {
 
     await channel.send({
       content: `<@${interaction.user.id}>`,
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x2b2d31)
-          .setTitle("Ticket Opened")
-      ],
+      embeds: [new EmbedBuilder().setTitle("Ticket Opened").setColor(0x2b2d31)],
       components: [row]
     });
 
@@ -185,7 +175,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "Unclaimed" });
   }
 
-  // ===== RENAME =====
+  // ===== RENAME (FIXED SAFE) =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
@@ -196,7 +186,13 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const base = baseName.get(interaction.channel.id);
-    const newName = `${base}-${interaction.user.username}`;
+
+    if (!base) {
+      return interaction.reply({ content: "Base name missing (restart issue)", ephemeral: true });
+    }
+
+    const tag = interaction.user.username;
+    const newName = `${base}-${tag}`;
 
     await interaction.channel.setName(newName);
 
