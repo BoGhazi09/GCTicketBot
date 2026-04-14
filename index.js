@@ -30,7 +30,7 @@ const CATEGORY_ID = "1488457065377824900";
 // ===== SERVICE MAP =====
 const channelMap = {
   "1478552685706875160": { prefix: "war" },
-  "1478556731306152098": { prefix: "aoo" },
+  "147855673209981051": { prefix: "aoo" },
   "1478556849124147381": { prefix: "strife" },
 
   "1478556676259971142": { prefix: "honor" },
@@ -44,8 +44,8 @@ const channelMap = {
 };
 
 // ===== MEMORY =====
-const baseName = new Map();     // channelId -> base name
-const renameCount = new Map();  // channelId -> number
+const baseName = new Map();
+const renameCount = new Map();
 
 // ===== CLIENT =====
 const client = new Client({
@@ -83,32 +83,26 @@ client.on("interactionCreate", async (interaction) => {
   // ===== PANEL =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
-    const modal = {
-      customId: "panel_modal",
-      title: "Create Panel",
-      components: [
-        {
-          type: 1,
-          components: [{
-            type: 4,
-            custom_id: "title",
-            label: "Title",
-            style: 1,
-            required: true
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type: 4,
-            custom_id: "desc",
-            label: "Description",
-            style: 2,
-            required: true
-          }]
-        }
-      ]
-    };
+    const modal = new ModalBuilder()
+      .setCustomId("panel_modal")
+      .setTitle("Create Panel");
+
+    const title = new TextInputBuilder()
+      .setCustomId("title")
+      .setLabel("Title")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const desc = new TextInputBuilder()
+      .setCustomId("desc")
+      .setLabel("Description")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(title),
+      new ActionRowBuilder().addComponents(desc)
+    );
 
     return interaction.showModal(modal);
   }
@@ -174,7 +168,7 @@ client.on("interactionCreate", async (interaction) => {
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("close")
-        .setLabel("Close")
+        .setLabel("Delete")
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -188,7 +182,7 @@ client.on("interactionCreate", async (interaction) => {
       components: [row]
     });
 
-    // ===== PIN FIRST MESSAGE =====
+    // ===== AUTO PIN BOT MESSAGE =====
     await msg.pin().catch(() => {});
 
     return interaction.reply({
@@ -197,7 +191,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== RENAME (NO POPUP, AUTO INCREMENT) =====
+  // ===== RENAME =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
     const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
@@ -224,7 +218,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== CLOSE =====
+  // ===== DELETE =====
   if (interaction.isButton() && interaction.customId === "close") {
 
     const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
@@ -232,7 +226,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
-    await interaction.reply({ content: "Closing..." });
+    await interaction.reply({ content: "Deleting..." });
 
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
