@@ -9,7 +9,10 @@ const {
   EmbedBuilder,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 
 const express = require("express");
@@ -19,45 +22,43 @@ const app = express();
 app.get("/", (req, res) => res.send("Bot running"));
 app.listen(process.env.PORT || 3000);
 
-// env
+// ===== CONFIG =====
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// roles
 const OWNER_ROLE = "1478554422303916185";
-const WAR_ROLE = "1478560237794623583";
-const ECO_ROLE = "1478560317494788188";
-const SHOWCASE_ROLE = "1479969384289009696";
-const FILLER_ROLE = "1491752366016561172";
 
-// category (PUT YOUR CATEGORY ID)
 const CATEGORY_ID = "1488457065377824900";
 
-// channel mapping
+// roles per service
 const channelMap = {
-  "1478552685706875160": { prefix: "war", role: WAR_ROLE },
-  "1478556731306152098": { prefix: "war", role: WAR_ROLE },
-  "1478556849124147381": { prefix: "war", role: WAR_ROLE },
+  "1478552685706875160": { prefix: "war", role: "1478560237794623583" },
+  "1478556731306152098": { prefix: "war", role: "1478560237794623583" },
+  "1478556849124147381": { prefix: "war", role: "1478560237794623583" },
 
-  "1478556700934930512": { prefix: "eco", role: ECO_ROLE },
-  "1478556676259971142": { prefix: "eco", role: ECO_ROLE },
-  "1478553096048345272": { prefix: "eco", role: ECO_ROLE },
+  "1478556700934930512": { prefix: "eco", role: "1478560317494788188" },
+  "1478556676259971142": { prefix: "eco", role: "1478560317494788188" },
+  "1478553096048345272": { prefix: "eco", role: "1478560317494788188" },
 
-  "1479968874370961450": { prefix: "showcase", role: SHOWCASE_ROLE },
+  "1479968874370961450": { prefix: "showcase", role: "1479969384289009696" },
 
-  "1491752594157080647": { prefix: "filler", role: FILLER_ROLE }
+  "1491752594157080647": { prefix: "filler", role: "1491752366016561172" }
 };
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// slash command
+// store claims + base names
+const claimed = new Map();
+const baseName = new Map();
+
+// ===== SLASH =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
-    .setDescription("Send ticket panel")
+    .setDescription("Create ticket panel")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -73,28 +74,50 @@ client.once("ready", () => {
   console.log("Ready " + client.user.tag);
 });
 
-// store claims
-const claimed = new Map();
-
+// ===== INTERACTIONS =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL =====
+  // ===== PANEL COMMAND =====
   if (interaction.isChatInputCommand()) {
+
+    const modal = new ModalBuilder()
+      .setCustomId("panel_modal")
+      .setTitle("Create Panel");
+
+    const title = new TextInputBuilder()
+      .setCustomId("title")
+      .setLabel("Panel Title")
+      .setStyle(TextInputStyle.Short);
+
+    const desc = new TextInputBuilder()
+      .setCustomId("desc")
+      .setLabel("Panel Description")
+      .setStyle(TextInputStyle.Paragraph);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(title),
+      new ActionRowBuilder().addComponents(desc)
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  // ===== PANEL CREATE =====
+  if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
+
+    const embed = new EmbedBuilder()
+      .setColor(0x2b2d31)
+      .setTitle(interaction.fields.getTextInputValue("title"))
+      .setDescription(interaction.fields.getTextInputValue("desc"));
+
+    const btn = new ButtonBuilder()
+      .setCustomId("create_ticket")
+      .setLabel("Create Ticket")
+      .setStyle(ButtonStyle.Primary);
+
     return interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x2b2d31)
-          .setTitle("Create a Ticket")
-          .setDescription("Click the button below")
-      ],
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("create_ticket")
-            .setLabel("Create Ticket")
-            .setStyle(ButtonStyle.Primary)
-        )
-      ]
+      embeds: [embed],
+      components: [new ActionRowBuilder().addComponents(btn)]
     });
   }
 
@@ -117,9 +140,10 @@ client.on("interactionCreate", async (interaction) => {
       ]
     });
 
-    const buttons = new ActionRowBuilder().addComponents(
+    baseName.set(channel.id, name);
+
+    const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("rename").setLabel("Rename").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
@@ -130,9 +154,8 @@ client.on("interactionCreate", async (interaction) => {
         new EmbedBuilder()
           .setColor(0x2b2d31)
           .setTitle("Ticket Opened")
-          .setDescription(`User: <@${interaction.user.id}>`)
       ],
-      components: [buttons]
+      components: [row]
     });
 
     return interaction.reply({ content: `Created ${channel}`, ephemeral: true });
@@ -145,38 +168,50 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: `Claimed by ${interaction.user}` });
   }
 
-  // ===== PERMISSION CHECK =====
-  function canManage(userId, member, channelId) {
-    return (
-      claimed.get(channelId) === userId ||
-      member.roles.cache.has(OWNER_ROLE)
-    );
-  }
-
-  // ===== UNCLAIM =====
-  if (interaction.isButton() && interaction.customId === "unclaim") {
-    if (!canManage(interaction.user.id, interaction.member, interaction.channel.id)) {
-      return interaction.reply({ content: "Not yours", ephemeral: true });
-    }
-
-    claimed.delete(interaction.channel.id);
-    return interaction.reply({ content: "Unclaimed" });
-  }
+  // ===== CHECK OWNER =====
+  const isOwner = interaction.member.roles.cache.has(OWNER_ROLE);
+  const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
 
   // ===== RENAME =====
   if (interaction.isButton() && interaction.customId === "rename") {
-    if (!canManage(interaction.user.id, interaction.member, interaction.channel.id)) {
-      return interaction.reply({ content: "Not yours", ephemeral: true });
+
+    if (!isOwner && !isClaimer) {
+      return interaction.reply({ content: "Not allowed", ephemeral: true });
     }
 
-    await interaction.channel.setName(`renamed-${interaction.user.username}`);
-    return interaction.reply({ content: "Renamed" });
+    const modal = new ModalBuilder()
+      .setCustomId("rename_modal")
+      .setTitle("Rename Ticket");
+
+    const input = new TextInputBuilder()
+      .setCustomId("name")
+      .setLabel("Your name tag")
+      .setStyle(TextInputStyle.Short);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+    return interaction.showModal(modal);
+  }
+
+  // ===== APPLY RENAME FORMAT =====
+  if (interaction.isModalSubmit() && interaction.customId === "rename_modal") {
+
+    const tag = interaction.fields.getTextInputValue("name");
+
+    const base = baseName.get(interaction.channel.id) || interaction.channel.name;
+
+    const newName = `${base}-${tag}`;
+
+    await interaction.channel.setName(newName);
+
+    return interaction.reply({ content: `Renamed to ${newName}`, ephemeral: true });
   }
 
   // ===== CLOSE =====
   if (interaction.isButton() && interaction.customId === "close") {
-    if (!canManage(interaction.user.id, interaction.member, interaction.channel.id)) {
-      return interaction.reply({ content: "Not yours", ephemeral: true });
+
+    if (!isOwner && !isClaimer) {
+      return interaction.reply({ content: "Not allowed", ephemeral: true });
     }
 
     await interaction.reply({ content: "Closing..." });
