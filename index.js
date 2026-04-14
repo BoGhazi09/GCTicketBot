@@ -46,17 +46,16 @@ const channelMap = {
   "1479968874370961450": { prefix: "showcase" }
 };
 
-// ===== MEMORY =====
-const claimed = new Map();
-const originalName = new Map();
-const locked = new Map(); // prevents multi claim spam
+// ===== MEMORY (FIXED) =====
+const claimed = new Map();        // channelId -> userId OR null
+const originalName = new Map();   // channelId -> string
 
 // ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== SLASH COMMAND =====
+// ===== REGISTER =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -66,18 +65,12 @@ const commands = [
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
-    console.log("Slash command registered");
-  } catch (e) {
-    console.log(e);
-  }
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
 })();
 
-// ===== READY =====
 client.once("ready", () => {
   console.log("Ready " + client.user.tag);
 });
@@ -131,16 +124,12 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== CREATE TICKET =====
+  // ===== CREATE =====
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     const data = channelMap[interaction.channel.id];
-
     if (!data) {
-      return interaction.reply({
-        content: "Not a panel channel.",
-        ephemeral: true
-      });
+      return interaction.reply({ content: "Not panel channel", ephemeral: true });
     }
 
     const base = `${data.prefix}-${interaction.user.username}`;
@@ -151,13 +140,12 @@ client.on("interactionCreate", async (interaction) => {
       parent: CATEGORY_ID,
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] }
       ]
     });
 
     originalName.set(channel.id, base);
     claimed.set(channel.id, null);
-    locked.set(channel.id, false);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
@@ -171,18 +159,15 @@ client.on("interactionCreate", async (interaction) => {
       components: [row]
     });
 
-    return interaction.reply({
-      content: `Created ${channel}`,
-      ephemeral: true
-    });
+    return interaction.reply({ content: `Created ${channel}`, ephemeral: true });
   }
 
-  // ===== CLAIM (FIXED LOCK SYSTEM) =====
+  // ===== CLAIM (FIXED RESET BUG) =====
   if (interaction.isButton() && interaction.customId === "claim") {
 
     const current = claimed.get(interaction.channel.id);
 
-    if (current) {
+    if (current !== null && current !== undefined) {
       return interaction.reply({
         content: `Already claimed by <@${current}>`,
         ephemeral: true
@@ -204,7 +189,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== UNCLAIM (FIXED RESET) =====
+  // ===== UNCLAIM (FULL RESET FIX) =====
   if (interaction.isButton() && interaction.customId === "unclaim") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
@@ -216,6 +201,8 @@ client.on("interactionCreate", async (interaction) => {
 
     const base = originalName.get(interaction.channel.id) || interaction.channel.name;
 
+    // 🔥 IMPORTANT: HARD RESET
+    claimed.delete(interaction.channel.id);
     claimed.set(interaction.channel.id, null);
 
     try {
