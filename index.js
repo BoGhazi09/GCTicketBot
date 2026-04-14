@@ -17,7 +17,7 @@ const {
 
 const express = require("express");
 
-// keep alive
+// ===== KEEP ALIVE =====
 const app = express();
 app.get("/", (req, res) => res.send("Bot running"));
 app.listen(process.env.PORT || 3000);
@@ -30,17 +30,23 @@ const GUILD_ID = process.env.GUILD_ID;
 const OWNER_ROLE = "1478554422303916185";
 const CATEGORY_ID = "1488457065377824900";
 
-// service map
+// ===== CHANNEL SERVICE MAP =====
 const channelMap = {
   "1478552685706875160": { prefix: "war" },
   "1478556731306152098": { prefix: "aoo" },
   "1478556849124147381": { prefix: "strife" },
+
   "1478556676259971142": { prefix: "honor" },
   "1478553096048345272": { prefix: "forts" },
-  "1478556700934930512": { prefix: "marauders" }
+
+  "1478556700934930512": { prefix: "marauders" },
+
+  "1491752594157080647": { prefix: "filler" },
+
+  "1479968874370961450": { prefix: "showcase" }
 };
 
-// memory
+// ===== MEMORY =====
 const claimed = new Map();
 const baseName = new Map();
 
@@ -49,7 +55,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== SLASH COMMAND =====
+// ===== REGISTER COMMAND =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -66,18 +72,18 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 })();
 
 client.once("ready", () => {
-  console.log("Ready " + client.user.tag);
+  console.log("Ready: " + client.user.tag);
 });
 
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL (FIXED) =====
+  // ===== PANEL (WORKS ANYWHERE) =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
       .setCustomId("panel_modal")
-      .setTitle("Create Panel");
+      .setTitle("Create Ticket Panel");
 
     const title = new TextInputBuilder()
       .setCustomId("title")
@@ -99,7 +105,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.showModal(modal);
   }
 
-  // ===== PANEL SUBMIT =====
+  // ===== PANEL CREATE =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
     const embed = new EmbedBuilder()
@@ -122,7 +128,13 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     const data = channelMap[interaction.channel.id];
-    if (!data) return interaction.reply({ content: "Wrong channel", ephemeral: true });
+
+    if (!data) {
+      return interaction.reply({
+        content: "This channel is not a ticket panel channel.",
+        ephemeral: true
+      });
+    }
 
     const base = `${data.prefix}-${interaction.user.username}`;
 
@@ -148,11 +160,18 @@ client.on("interactionCreate", async (interaction) => {
 
     await channel.send({
       content: `<@${interaction.user.id}>`,
-      embeds: [new EmbedBuilder().setTitle("Ticket Opened").setColor(0x2b2d31)],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x2b2d31)
+          .setTitle("Ticket Opened")
+      ],
       components: [row]
     });
 
-    return interaction.reply({ content: `Created ${channel}`, ephemeral: true });
+    return interaction.reply({
+      content: `Created ${channel}`,
+      ephemeral: true
+    });
   }
 
   // ===== CLAIM =====
@@ -175,7 +194,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "Unclaimed" });
   }
 
-  // ===== RENAME (FIXED SAFE) =====
+  // ===== RENAME =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
@@ -186,13 +205,11 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const base = baseName.get(interaction.channel.id);
-
     if (!base) {
-      return interaction.reply({ content: "Base name missing (restart issue)", ephemeral: true });
+      return interaction.reply({ content: "Base name missing", ephemeral: true });
     }
 
-    const tag = interaction.user.username;
-    const newName = `${base}-${tag}`;
+    const newName = `${base}-${interaction.user.username}`;
 
     await interaction.channel.setName(newName);
 
