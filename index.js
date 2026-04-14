@@ -49,6 +49,7 @@ const channelMap = {
 // ===== MEMORY =====
 const claimed = new Map();
 const originalName = new Map();
+const locked = new Map(); // prevents multi claim spam
 
 // ===== CLIENT =====
 const client = new Client({
@@ -72,7 +73,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
     );
     console.log("Slash command registered");
   } catch (e) {
-    console.log("Command register error", e);
+    console.log(e);
   }
 })();
 
@@ -84,7 +85,7 @@ client.once("ready", () => {
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL (FIXED 40060 SAFE) =====
+  // ===== PANEL =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
@@ -108,7 +109,7 @@ client.on("interactionCreate", async (interaction) => {
       new ActionRowBuilder().addComponents(desc)
     );
 
-    return interaction.showModal(modal); // IMPORTANT: STOP HERE
+    return interaction.showModal(modal);
   }
 
   // ===== PANEL SUBMIT =====
@@ -126,8 +127,7 @@ client.on("interactionCreate", async (interaction) => {
 
     return interaction.reply({
       embeds: [embed],
-      components: [new ActionRowBuilder().addComponents(btn)],
-      ephemeral: false
+      components: [new ActionRowBuilder().addComponents(btn)]
     });
   }
 
@@ -138,7 +138,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (!data) {
       return interaction.reply({
-        content: "This is not a valid panel channel.",
+        content: "Not a panel channel.",
         ephemeral: true
       });
     }
@@ -151,17 +151,17 @@ client.on("interactionCreate", async (interaction) => {
       parent: CATEGORY_ID,
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] }
+        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
       ]
     });
 
     originalName.set(channel.id, base);
     claimed.set(channel.id, null);
+    locked.set(channel.id, false);
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId("unclaim").setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("rename").setLabel("Rename").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
@@ -177,65 +177,53 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== CLAIM =====
+  // ===== CLAIM (FIXED LOCK SYSTEM) =====
   if (interaction.isButton() && interaction.customId === "claim") {
 
-    if (claimed.get(interaction.channel.id)) {
-      return interaction.reply({ content: "Already claimed", ephemeral: true });
+    const current = claimed.get(interaction.channel.id);
+
+    if (current) {
+      return interaction.reply({
+        content: `Already claimed by <@${current}>`,
+        ephemeral: true
+      });
     }
 
     claimed.set(interaction.channel.id, interaction.user.id);
 
-    const base = originalName.get(interaction.channel.id);
+    const base = originalName.get(interaction.channel.id) || interaction.channel.name;
     const newName = `${base}-${interaction.user.username}`;
 
-    await interaction.channel.setName(newName);
+    try {
+      await interaction.channel.setName(newName);
+    } catch {}
 
     return interaction.reply({
-      content: `Claimed & renamed`,
+      content: `Claimed by ${interaction.user}`,
       ephemeral: false
     });
   }
 
-  // ===== UNCLAIM =====
+  // ===== UNCLAIM (FIXED RESET) =====
   if (interaction.isButton() && interaction.customId === "unclaim") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
+    const claimer = claimed.get(interaction.channel.id);
 
-    if (!owner && !isClaimer) {
+    if (!owner && claimer !== interaction.user.id) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
-    const base = originalName.get(interaction.channel.id);
+    const base = originalName.get(interaction.channel.id) || interaction.channel.name;
 
     claimed.set(interaction.channel.id, null);
 
-    await interaction.channel.setName(base);
+    try {
+      await interaction.channel.setName(base);
+    } catch {}
 
     return interaction.reply({
-      content: "Unclaimed & reset",
-      ephemeral: false
-    });
-  }
-
-  // ===== RENAME =====
-  if (interaction.isButton() && interaction.customId === "rename") {
-
-    const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
-
-    if (!owner && !isClaimer) {
-      return interaction.reply({ content: "No permission", ephemeral: true });
-    }
-
-    const base = originalName.get(interaction.channel.id);
-    const newName = `${base}-${interaction.user.username}`;
-
-    await interaction.channel.setName(newName);
-
-    return interaction.reply({
-      content: "Renamed",
+      content: "Unclaimed",
       ephemeral: false
     });
   }
@@ -244,15 +232,17 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton() && interaction.customId === "close") {
 
     const owner = interaction.member.roles.cache.has(OWNER_ROLE);
-    const isClaimer = claimed.get(interaction.channel.id) === interaction.user.id;
+    const claimer = claimed.get(interaction.channel.id);
 
-    if (!owner && !isClaimer) {
+    if (!owner && claimer !== interaction.user.id) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
     await interaction.reply({ content: "Closing..." });
 
-    setTimeout(() => interaction.channel.delete(), 2000);
+    setTimeout(() => {
+      interaction.channel.delete().catch(() => {});
+    }, 2000);
   }
 
 });
