@@ -18,12 +18,12 @@ const {
 
 const express = require("express");
 
-// keep alive
+// ===== KEEP ALIVE =====
 const app = express();
 app.get("/", (req, res) => res.send("Bot running"));
 app.listen(process.env.PORT || 3000);
 
-// config
+// ===== CONFIG (YOUR IDS ADDED) =====
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -32,15 +32,19 @@ const STAFF_ROLE_ID = "1478564123259310090";
 const CATEGORY_ID = "1488457065377824900";
 const LOG_CHANNEL_ID = "1488466548828930118";
 
+// anti spam
 const cooldown = new Set();
 
+// ===== BOT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// command
+// ===== COMMAND =====
 const commands = [
-  new SlashCommandBuilder().setName("panel").setDescription("Create ticket panel")
+  new SlashCommandBuilder()
+    .setName("panel")
+    .setDescription("Create ticket panel")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -56,12 +60,18 @@ client.once("ready", () => {
   console.log("Ready: " + client.user.tag);
 });
 
+// ===== INTERACTIONS =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL COMMAND =====
+  // ===== /panel =====
   if (interaction.isChatInputCommand()) {
+
+    // staff only
     if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
-      return interaction.reply({ content: "No permission", ephemeral: true });
+      return interaction.reply({
+        content: "No permission.",
+        ephemeral: true
+      });
     }
 
     const select = new ChannelSelectMenuBuilder()
@@ -76,7 +86,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== CHANNEL SELECT =====
+  // ===== SELECT CHANNEL =====
   if (interaction.isChannelSelectMenu()) {
     if (interaction.customId !== "select_channel") return;
 
@@ -106,7 +116,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.showModal(modal);
   }
 
-  // ===== PANEL CREATE =====
+  // ===== CREATE PANEL =====
   if (interaction.isModalSubmit() && interaction.customId.startsWith("panel_")) {
 
     const channelId = interaction.customId.split("_")[1];
@@ -127,14 +137,20 @@ client.on("interactionCreate", async (interaction) => {
       components: [new ActionRowBuilder().addComponents(button)]
     });
 
-    return interaction.reply({ content: "Panel created!", ephemeral: true });
+    return interaction.reply({
+      content: "Panel created!",
+      ephemeral: true
+    });
   }
 
   // ===== CREATE TICKET =====
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     if (cooldown.has(interaction.user.id)) {
-      return interaction.reply({ content: "Wait a few seconds.", ephemeral: true });
+      return interaction.reply({
+        content: "Wait a few seconds.",
+        ephemeral: true
+      });
     }
 
     cooldown.add(interaction.user.id);
@@ -226,7 +242,10 @@ client.on("interactionCreate", async (interaction) => {
       content: `Transcript for ${interaction.channel.name}\n\n${transcript}`
     });
 
-    await interaction.reply({ content: "Closing...", ephemeral: true });
+    await interaction.reply({
+      content: "Closing...",
+      ephemeral: true
+    });
 
     setTimeout(() => interaction.channel.delete(), 3000);
   }
