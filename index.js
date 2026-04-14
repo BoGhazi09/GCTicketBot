@@ -38,9 +38,9 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// slash
+// register command
 const commands = [
-  new SlashCommandBuilder().setName("panel").setDescription("Create panel")
+  new SlashCommandBuilder().setName("panel").setDescription("Create ticket panel")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -65,19 +65,21 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const select = new ChannelSelectMenuBuilder()
-      .setCustomId("panel_channel")
-      .setPlaceholder("Select channel")
+      .setCustomId("select_channel")
+      .setPlaceholder("Select panel channel")
       .addChannelTypes(ChannelType.GuildText);
 
     return interaction.reply({
-      content: "Choose channel for panel",
+      content: "Choose where to send the panel",
       components: [new ActionRowBuilder().addComponents(select)],
       ephemeral: true
     });
   }
 
-  // ===== PANEL CHANNEL PICK =====
+  // ===== CHANNEL SELECT =====
   if (interaction.isChannelSelectMenu()) {
+    if (interaction.customId !== "select_channel") return;
+
     const channelId = interaction.values[0];
 
     const modal = new ModalBuilder()
@@ -86,13 +88,15 @@ client.on("interactionCreate", async (interaction) => {
 
     const title = new TextInputBuilder()
       .setCustomId("title")
-      .setLabel("Title")
-      .setStyle(TextInputStyle.Short);
+      .setLabel("Panel Title")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
     const desc = new TextInputBuilder()
       .setCustomId("desc")
-      .setLabel("Description")
-      .setStyle(TextInputStyle.Paragraph);
+      .setLabel("Panel Description")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(title),
@@ -103,34 +107,35 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // ===== PANEL CREATE =====
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith("panel_")) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith("panel_")) {
 
-      const channelId = interaction.customId.split("_")[1];
-      const channel = await client.channels.fetch(channelId);
+    const channelId = interaction.customId.split("_")[1];
+    const channel = await client.channels.fetch(channelId);
 
-      const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
-        .setTitle(interaction.fields.getTextInputValue("title"))
-        .setDescription(interaction.fields.getTextInputValue("desc"));
+    const title = interaction.fields.getTextInputValue("title");
+    const desc = interaction.fields.getTextInputValue("desc");
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("ticket_support").setLabel("Support").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("ticket_buy").setLabel("Buy").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("ticket_other").setLabel("Other").setStyle(ButtonStyle.Secondary)
-      );
+    const embed = new EmbedBuilder()
+      .setColor(0x2b2d31)
+      .setTitle(title)
+      .setDescription(desc);
 
-      await channel.send({ embeds: [embed], components: [row] });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("ticket_support").setLabel("Support").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("ticket_buy").setLabel("Buy").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("ticket_other").setLabel("Other").setStyle(ButtonStyle.Secondary)
+    );
 
-      return interaction.reply({ content: "Panel sent", ephemeral: true });
-    }
+    await channel.send({ embeds: [embed], components: [row] });
+
+    return interaction.reply({ content: "Panel created!", ephemeral: true });
   }
 
   // ===== CREATE TICKET =====
   if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
 
     if (cooldown.has(interaction.user.id)) {
-      return interaction.reply({ content: "Slow down!", ephemeral: true });
+      return interaction.reply({ content: "Wait a few seconds.", ephemeral: true });
     }
 
     cooldown.add(interaction.user.id);
@@ -138,18 +143,23 @@ client.on("interactionCreate", async (interaction) => {
 
     const type = interaction.customId.split("_")[1];
 
-    const channel = await interaction.guild.channels.create({
+    const ticketChannel = await interaction.guild.channels.create({
       name: `${type}-${interaction.user.username}`,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID,
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-        { id: STAFF_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel] },
-      ],
+        { id: STAFF_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel] }
+      ]
     });
 
-    await channel.setPosition(9999);
+    await ticketChannel.setPosition(9999);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x2b2d31)
+      .setTitle("Ticket Created")
+      .setDescription(`Type: **${type}**\nUser: <@${interaction.user.id}>`);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("claim").setLabel("Claim").setStyle(ButtonStyle.Primary),
@@ -157,17 +167,22 @@ client.on("interactionCreate", async (interaction) => {
       new ButtonBuilder().setCustomId("close").setLabel("Close").setStyle(ButtonStyle.Danger)
     );
 
-    await channel.send({
-      content: `<@${interaction.user.id}> Ticket opened (${type})`,
+    await ticketChannel.send({
+      content: `<@${interaction.user.id}>`,
+      embeds: [embed],
       components: [row]
     });
 
-    return interaction.reply({ content: `Created: ${channel}`, ephemeral: true });
+    return interaction.reply({ content: `Ticket created: ${ticketChannel}`, ephemeral: true });
   }
 
   // ===== CLAIM =====
   if (interaction.isButton() && interaction.customId === "claim") {
-    await interaction.reply({ content: `${interaction.user} claimed this ticket` });
+    if (!interaction.member.roles.cache.has(STAFF_ROLE_ID)) {
+      return interaction.reply({ content: "Staff only.", ephemeral: true });
+    }
+
+    await interaction.reply({ content: `Claimed by ${interaction.user}` });
   }
 
   // ===== RENAME =====
@@ -179,7 +194,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const input = new TextInputBuilder()
       .setCustomId("name")
-      .setLabel("New name")
+      .setLabel("New channel name")
       .setStyle(TextInputStyle.Short);
 
     modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -188,10 +203,11 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.isModalSubmit() && interaction.customId === "rename_modal") {
-    const name = interaction.fields.getTextInputValue("name");
+    const newName = interaction.fields.getTextInputValue("name");
 
-    await interaction.channel.setName(name);
-    return interaction.reply({ content: "Renamed", ephemeral: true });
+    await interaction.channel.setName(newName);
+
+    return interaction.reply({ content: "Renamed!", ephemeral: true });
   }
 
   // ===== CLOSE =====
@@ -200,13 +216,17 @@ client.on("interactionCreate", async (interaction) => {
     const logChannel = await client.channels.fetch(LOG_CHANNEL_ID);
 
     const messages = await interaction.channel.messages.fetch({ limit: 100 });
-    let log = messages.map(m => `${m.author.tag}: ${m.content}`).join("\n");
+
+    let transcript = messages
+      .map(m => `${m.author.tag}: ${m.content}`)
+      .reverse()
+      .join("\n");
 
     await logChannel.send({
-      content: `Transcript of ${interaction.channel.name}\n\n${log}`
+      content: `Transcript for ${interaction.channel.name}\n\n${transcript}`
     });
 
-    await interaction.reply({ content: "Closing...", ephemeral: true });
+    await interaction.reply({ content: "Closing ticket...", ephemeral: true });
 
     setTimeout(() => interaction.channel.delete(), 3000);
   }
