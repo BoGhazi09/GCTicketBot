@@ -51,9 +51,6 @@ const channelMap = {
   "1479968874370961450": { prefix: "showcase", role: SHOWCASE_ROLE }
 };
 
-// ===== MEMORY =====
-const baseName = new Map();
-
 // ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
@@ -176,8 +173,6 @@ client.on("interactionCreate", async (interaction) => {
         ]
       });
 
-      baseName.set(channel.id, base);
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("rename")
@@ -227,23 +222,17 @@ client.on("interactionCreate", async (interaction) => {
     );
   }
 
-  // RENAME (FIXED NO STACK)
+  // RENAME (FINAL FIX)
   if (interaction.isButton() && interaction.customId === "rename") {
 
     if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
-    const original = baseName.get(interaction.channel.id);
+    const parts = interaction.channel.name.split("-");
+    const base = parts.slice(0, 2).join("-");
 
-    if (!original) {
-      return interaction.reply({
-        content: "Base name missing",
-        ephemeral: true
-      });
-    }
-
-    const newName = `${original}-${interaction.user.username.toLowerCase()}`;
+    const newName = `${base}-${interaction.user.username.toLowerCase()}`;
 
     await interaction.channel.setName(newName).catch(() => {});
 
