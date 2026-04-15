@@ -28,6 +28,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const OWNER_ROLE = "1478554422303916185";
+const STAFF_ROLE = "1478564123259310090"; // will be BLOCKED
 
 const CATEGORY_ID = "1488457065377824900";
 
@@ -39,20 +40,16 @@ const FILLER_ROLE = "1491752366016561172";
 
 // ===== CHANNEL MAP =====
 const channelMap = {
-  // WAR
   "1478552685706875160": { prefix: "war", role: WAR_ROLE },
   "1478556731306152098": { prefix: "aoo", role: WAR_ROLE },
   "1478556849124147381": { prefix: "strife", role: WAR_ROLE },
 
-  // ECO
   "1478553096048345272": { prefix: "honor", role: ECO_ROLE },
   "1478556676259971142": { prefix: "forts", role: ECO_ROLE },
   "1478556700934930512": { prefix: "marauders", role: ECO_ROLE },
 
-  // FILLER
   "1491752594157080647": { prefix: "filler", role: FILLER_ROLE },
 
-  // SHOWCASE
   "1479968874370961450": { prefix: "showcase", role: SHOWCASE_ROLE }
 };
 
@@ -137,7 +134,6 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     const data = channelMap[interaction.channel.id];
-
     if (!data) {
       return interaction.reply({ content: "Wrong channel", ephemeral: true });
     }
@@ -150,10 +146,19 @@ client.on("interactionCreate", async (interaction) => {
       type: ChannelType.GuildText,
       parent: CATEGORY_ID,
       permissionOverwrites: [
+        // ❌ everyone blocked
         {
           id: interaction.guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
+
+        // ❌ BLOCK STAFF ROLE
+        {
+          id: STAFF_ROLE,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+
+        // ✅ user
         {
           id: interaction.user.id,
           allow: [
@@ -161,12 +166,16 @@ client.on("interactionCreate", async (interaction) => {
             PermissionsBitField.Flags.SendMessages
           ]
         },
+
+        // ✅ correct service role ONLY
         {
-          id: data.role, // ✅ ONLY THIS ROLE CAN SEE
+          id: data.role,
           allow: [PermissionsBitField.Flags.ViewChannel]
         },
+
+        // ✅ owner override
         {
-          id: OWNER_ROLE, // ✅ OWNER ALWAYS CAN SEE
+          id: OWNER_ROLE,
           allow: [PermissionsBitField.Flags.ViewChannel]
         }
       ]
@@ -205,20 +214,17 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // ===== PERMS =====
-  function isAllowed(member, roleId) {
+  function isStaff(member) {
     return (
-      member.roles.cache.has(roleId) ||
-      member.roles.cache.has(OWNER_ROLE)
+      member.roles.cache.has(OWNER_ROLE) ||
+      member.roles.cache.has(STAFF_ROLE)
     );
   }
 
   // ===== RENAME =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
-    const data = channelMap[interaction.channel.parent?.children?.first()?.id] || null;
-
-    if (!interaction.member.roles.cache.has(OWNER_ROLE) &&
-        !interaction.member.roles.cache.some(r => r.id === data?.role)) {
+    if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
