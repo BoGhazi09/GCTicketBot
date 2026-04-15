@@ -28,22 +28,33 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const OWNER_ROLE = "1478554422303916185";
+const STAFF_ROLE = "1478564123259310090";
+
 const CATEGORY_ID = "1488457065377824900";
+
+// ===== ROLE IDS =====
+const WAR_ROLE = "1478560237794623583";
+const ECO_ROLE = "1478560317494788188";
+const SHOWCASE_ROLE = "1479969384289009696";
+const FILLER_ROLE = "1491752366016561172";
 
 // ===== CHANNEL MAP =====
 const channelMap = {
-  "1478552685706875160": { prefix: "war" },
-  "1478556731306152098": { prefix: "aoo" },
-  "1478556849124147381": { prefix: "strife" },
+  // WAR
+  "1478552685706875160": { prefix: "war", role: WAR_ROLE },
+  "1478556731306152098": { prefix: "aoo", role: WAR_ROLE },
+  "1478556849124147381": { prefix: "strife", role: WAR_ROLE },
 
-  "1478556676259971142": { prefix: "honor" },
-  "1478553096048345272": { prefix: "forts" },
+  // ECO
+  "1478553096048345272": { prefix: "honor", role: ECO_ROLE },
+  "1478556676259971142": { prefix: "forts", role: ECO_ROLE },
+  "1478556700934930512": { prefix: "marauders", role: ECO_ROLE },
 
-  "1478556700934930512": { prefix: "marauders" },
+  // FILLER ✅ FIXED
+  "1491752594157080647": { prefix: "filler", role: FILLER_ROLE },
 
-  "1491752594157080647": { prefix: "filler" },
-
-  "1479968874370961450": { prefix: "showcase" }
+  // SHOWCASE ✅ FIXED
+  "1479968874370961450": { prefix: "showcase", role: SHOWCASE_ROLE }
 };
 
 // ===== MEMORY =====
@@ -54,7 +65,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== REGISTER =====
+// ===== COMMAND =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -107,13 +118,10 @@ client.on("interactionCreate", async (interaction) => {
   // ===== PANEL SUBMIT =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
-    const title = interaction.fields.getTextInputValue("title");
-    const desc = interaction.fields.getTextInputValue("desc");
-
     const embed = new EmbedBuilder()
       .setColor(0x2b2d31)
-      .setTitle(title)
-      .setDescription(desc);
+      .setTitle(interaction.fields.getTextInputValue("title"))
+      .setDescription(interaction.fields.getTextInputValue("desc"));
 
     const btn = new ButtonBuilder()
       .setCustomId("create_ticket")
@@ -130,11 +138,13 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     const data = channelMap[interaction.channel.id];
+
     if (!data) {
-      return interaction.reply({ content: "Not panel channel", ephemeral: true });
+      return interaction.reply({ content: "Wrong channel", ephemeral: true });
     }
 
-    const base = `${data.prefix}-${interaction.user.username}`;
+    const username = interaction.user.username.toLowerCase();
+    const base = `${data.prefix}-${username}`;
 
     const channel = await interaction.guild.channels.create({
       name: base,
@@ -151,6 +161,10 @@ client.on("interactionCreate", async (interaction) => {
             PermissionsBitField.Flags.ViewChannel,
             PermissionsBitField.Flags.SendMessages
           ]
+        },
+        {
+          id: STAFF_ROLE,
+          allow: [PermissionsBitField.Flags.ViewChannel]
         }
       ]
     });
@@ -161,7 +175,7 @@ client.on("interactionCreate", async (interaction) => {
       new ButtonBuilder()
         .setCustomId("rename")
         .setLabel("Rename")
-        .setStyle(ButtonStyle.Primary), // 🔵 BLUE
+        .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId("close")
         .setLabel("Delete")
@@ -169,7 +183,8 @@ client.on("interactionCreate", async (interaction) => {
     );
 
     const msg = await channel.send({
-      content: `<@${interaction.user.id}>`,
+      content: `<@${interaction.user.id}> <@&${data.role}>`,
+      allowedMentions: { parse: ["users", "roles"] },
       embeds: [
         new EmbedBuilder()
           .setTitle("Ticket Opened")
@@ -186,30 +201,33 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== RENAME (USERNAME BASED) =====
+  // ===== PERMS =====
+  function isStaff(member) {
+    return (
+      member.roles.cache.has(STAFF_ROLE) ||
+      member.roles.cache.has(OWNER_ROLE)
+    );
+  }
+
+  // ===== RENAME =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
-    const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
-    if (!isStaff) {
+    if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
     const base = baseName.get(interaction.channel.id) || interaction.channel.name;
-
-    const newName = `${base}-${interaction.user.username}`;
+    const newName = `${base}-${interaction.user.username.toLowerCase()}`;
 
     await interaction.channel.setName(newName).catch(() => {});
 
-    return interaction.reply({
-      content: `Renamed → ${newName}`
-    });
+    return interaction.reply({ content: `Renamed → ${newName}` });
   }
 
   // ===== DELETE =====
   if (interaction.isButton() && interaction.customId === "close") {
 
-    const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
-    if (!isStaff) {
+    if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
