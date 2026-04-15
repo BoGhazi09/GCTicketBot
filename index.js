@@ -239,7 +239,7 @@ client.on("interactionCreate", async (interaction) => {
   // ===== DELETE =====
   if (interaction.isButton() && interaction.customId === "close") {
 
-    if (!interaction.member.roles.cache.has(OWNER_ROLE)) {
+    if (!interaction.member.roles.cache.has(STAFF_ROLE)) {
       return interaction.reply({ content: "Only owner can delete", ephemeral: true });
     }
 
