@@ -30,10 +30,10 @@ const GUILD_ID = process.env.GUILD_ID;
 const OWNER_ROLE = "1478554422303916185";
 const CATEGORY_ID = "1488457065377824900";
 
-// ===== SERVICE MAP =====
+// ===== CHANNEL MAP =====
 const channelMap = {
   "1478552685706875160": { prefix: "war" },
-  "147855673209981051": { prefix: "aoo" },
+  "1478556731306152098": { prefix: "aoo" },
   "1478556849124147381": { prefix: "strife" },
 
   "1478556676259971142": { prefix: "honor" },
@@ -55,7 +55,7 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== REGISTER COMMAND =====
+// ===== REGISTER =====
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
@@ -65,15 +65,10 @@ const commands = [
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
-    console.log("Slash registered");
-  } catch (e) {
-    console.log(e);
-  }
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
 })();
 
 client.once("ready", () => {
@@ -83,7 +78,7 @@ client.once("ready", () => {
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL COMMAND =====
+  // ===== PANEL COMMAND (FIXED) =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
@@ -107,10 +102,11 @@ client.on("interactionCreate", async (interaction) => {
       new ActionRowBuilder().addComponents(desc)
     );
 
+    // 🔥 DIRECT modal (no delay, no defer)
     return interaction.showModal(modal);
   }
 
-  // ===== PANEL SUBMIT =====
+  // ===== MODAL SUBMIT =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
     const title = interaction.fields.getTextInputValue("title");
@@ -213,8 +209,7 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.channel.setName(newName).catch(() => {});
 
     return interaction.reply({
-      content: `Renamed → ${newName}`,
-      ephemeral: false
+      content: `Renamed → ${newName}`
     });
   }
 
