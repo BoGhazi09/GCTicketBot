@@ -83,7 +83,7 @@ client.once("ready", () => {
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // PANEL COMMAND
+  // PANEL
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
@@ -129,7 +129,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // CREATE TICKET BUTTON
+  // CREATE TICKET
   if (interaction.isButton() && interaction.customId === "create_ticket") {
 
     try {
@@ -137,7 +137,7 @@ client.on("interactionCreate", async (interaction) => {
 
       if (!data) {
         return interaction.reply({
-          content: "This panel is not linked to a valid ticket channel.",
+          content: "Wrong channel",
           ephemeral: true
         });
       }
@@ -208,11 +208,11 @@ client.on("interactionCreate", async (interaction) => {
       });
 
     } catch (err) {
-      console.log("ERROR:", err);
+      console.log(err);
 
       if (!interaction.replied) {
         return interaction.reply({
-          content: "Error creating ticket.",
+          content: "Error creating ticket",
           ephemeral: true
         });
       }
@@ -227,15 +227,23 @@ client.on("interactionCreate", async (interaction) => {
     );
   }
 
-  // RENAME BUTTON
+  // RENAME (FIXED NO STACK)
   if (interaction.isButton() && interaction.customId === "rename") {
 
     if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
-    const base = baseName.get(interaction.channel.id) || interaction.channel.name;
-    const newName = `${base}-${interaction.user.username.toLowerCase()}`;
+    const original = baseName.get(interaction.channel.id);
+
+    if (!original) {
+      return interaction.reply({
+        content: "Base name missing",
+        ephemeral: true
+      });
+    }
+
+    const newName = `${original}-${interaction.user.username.toLowerCase()}`;
 
     await interaction.channel.setName(newName).catch(() => {});
 
@@ -244,7 +252,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // DELETE BUTTON
+  // DELETE
   if (interaction.isButton() && interaction.customId === "close") {
 
     if (!interaction.member.roles.cache.has(OWNER_ROLE)) {
