@@ -48,7 +48,6 @@ const channelMap = {
 
 // ===== MEMORY =====
 const baseName = new Map();
-const renameCount = new Map();
 
 // ===== CLIENT =====
 const client = new Client({
@@ -78,7 +77,7 @@ client.once("ready", () => {
 // ===== MAIN =====
 client.on("interactionCreate", async (interaction) => {
 
-  // ===== PANEL COMMAND (FIXED) =====
+  // ===== PANEL =====
   if (interaction.isChatInputCommand() && interaction.commandName === "panel") {
 
     const modal = new ModalBuilder()
@@ -102,11 +101,10 @@ client.on("interactionCreate", async (interaction) => {
       new ActionRowBuilder().addComponents(desc)
     );
 
-    // 🔥 DIRECT modal (no delay, no defer)
     return interaction.showModal(modal);
   }
 
-  // ===== MODAL SUBMIT =====
+  // ===== PANEL SUBMIT =====
   if (interaction.isModalSubmit() && interaction.customId === "panel_modal") {
 
     const title = interaction.fields.getTextInputValue("title");
@@ -158,13 +156,12 @@ client.on("interactionCreate", async (interaction) => {
     });
 
     baseName.set(channel.id, base);
-    renameCount.set(channel.id, 0);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("rename")
         .setLabel("Rename")
-        .setStyle(ButtonStyle.Secondary),
+        .setStyle(ButtonStyle.Primary), // 🔵 BLUE
       new ButtonBuilder()
         .setCustomId("close")
         .setLabel("Delete")
@@ -189,7 +186,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ===== RENAME =====
+  // ===== RENAME (USERNAME BASED) =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
     const isStaff = interaction.member.roles.cache.has(OWNER_ROLE);
@@ -199,12 +196,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const base = baseName.get(interaction.channel.id) || interaction.channel.name;
 
-    let count = renameCount.get(interaction.channel.id) || 0;
-    count++;
-
-    renameCount.set(interaction.channel.id, count);
-
-    const newName = `${base}-pilot${count}`;
+    const newName = `${base}-${interaction.user.username}`;
 
     await interaction.channel.setName(newName).catch(() => {});
 
