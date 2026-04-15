@@ -28,7 +28,6 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const OWNER_ROLE = "1478554422303916185";
-const STAFF_ROLE = "1478564123259310090";
 
 const CATEGORY_ID = "1488457065377824900";
 
@@ -50,10 +49,10 @@ const channelMap = {
   "1478556676259971142": { prefix: "forts", role: ECO_ROLE },
   "1478556700934930512": { prefix: "marauders", role: ECO_ROLE },
 
-  // FILLER ✅ FIXED
+  // FILLER
   "1491752594157080647": { prefix: "filler", role: FILLER_ROLE },
 
-  // SHOWCASE ✅ FIXED
+  // SHOWCASE
   "1479968874370961450": { prefix: "showcase", role: SHOWCASE_ROLE }
 };
 
@@ -163,7 +162,11 @@ client.on("interactionCreate", async (interaction) => {
           ]
         },
         {
-          id: STAFF_ROLE,
+          id: data.role, // ✅ ONLY THIS ROLE CAN SEE
+          allow: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: OWNER_ROLE, // ✅ OWNER ALWAYS CAN SEE
           allow: [PermissionsBitField.Flags.ViewChannel]
         }
       ]
@@ -202,9 +205,9 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // ===== PERMS =====
-  function isStaff(member) {
+  function isAllowed(member, roleId) {
     return (
-      member.roles.cache.has(STAFF_ROLE) ||
+      member.roles.cache.has(roleId) ||
       member.roles.cache.has(OWNER_ROLE)
     );
   }
@@ -212,7 +215,10 @@ client.on("interactionCreate", async (interaction) => {
   // ===== RENAME =====
   if (interaction.isButton() && interaction.customId === "rename") {
 
-    if (!isStaff(interaction.member)) {
+    const data = channelMap[interaction.channel.parent?.children?.first()?.id] || null;
+
+    if (!interaction.member.roles.cache.has(OWNER_ROLE) &&
+        !interaction.member.roles.cache.some(r => r.id === data?.role)) {
       return interaction.reply({ content: "No permission", ephemeral: true });
     }
 
@@ -227,8 +233,8 @@ client.on("interactionCreate", async (interaction) => {
   // ===== DELETE =====
   if (interaction.isButton() && interaction.customId === "close") {
 
-    if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: "No permission", ephemeral: true });
+    if (!interaction.member.roles.cache.has(OWNER_ROLE)) {
+      return interaction.reply({ content: "Only owner can delete", ephemeral: true });
     }
 
     await interaction.reply({ content: "Deleting..." });
